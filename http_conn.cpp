@@ -22,8 +22,9 @@ int setnonblocking( int fd )
 void addfd( int epollfd, int fd, bool one_shot )
 {
     epoll_event event;
-    event.data.fd = fd;
+    event.data.fd = fd;		//用户数据的fd
     event.events = EPOLLIN | EPOLLET | EPOLLRDHUP;
+	//使得socket连接在任一时刻都只被一个线程处理
     if( one_shot )
     {
         event.events |= EPOLLONESHOT;
@@ -38,6 +39,7 @@ void removefd( int epollfd, int fd )
     close( fd );
 }
 
+//增加监听的事件种类
 void modfd( int epollfd, int fd, int ev )
 {
     epoll_event event;
@@ -53,7 +55,7 @@ void http_conn::close_conn( bool real_close )
 {
     if( real_close && ( m_sockfd != -1 ) )
     {
-        //modfd( m_epollfd, m_sockfd, EPOLLIN );
+        modfd( m_epollfd, m_sockfd, EPOLLIN );
         removefd( m_epollfd, m_sockfd );
         m_sockfd = -1;
         m_user_count--;
@@ -75,9 +77,12 @@ void http_conn::init( int sockfd, const sockaddr_in& addr )
     init();
 }
 
+//private，只能在另一个重载的init中调用
 void http_conn::init()
 {
+	//服务器解析http所处状态
     m_check_state = CHECK_STATE_REQUESTLINE;
+	//http默认为短连接
     m_linger = false;
 
     m_method = GET;
@@ -94,9 +99,11 @@ void http_conn::init()
     memset( m_real_file, '\0', FILENAME_LEN );
 }
 
+//解析读入的http数据,其实就是把每一行分出来而已
 http_conn::LINE_STATUS http_conn::parse_line()
 {
     char temp;
+	//从当前的位置一直解析到已读入的客户数据的最后一个字符
     for ( ; m_checked_idx < m_read_idx; ++m_checked_idx )
     {
         temp = m_read_buf[ m_checked_idx ];
@@ -112,7 +119,7 @@ http_conn::LINE_STATUS http_conn::parse_line()
                 m_read_buf[ m_checked_idx++ ] = '\0';
                 return LINE_OK;
             }
-
+			
             return LINE_BAD;
         }
         else if( temp == '\n' )
@@ -130,6 +137,7 @@ http_conn::LINE_STATUS http_conn::parse_line()
     return LINE_OPEN;
 }
 
+//读取客户数据
 bool http_conn::read()
 {
     if( m_read_idx >= READ_BUFFER_SIZE )
@@ -159,6 +167,7 @@ bool http_conn::read()
     return true;
 }
 
+//解析http请求行
 http_conn::HTTP_CODE http_conn::parse_request_line( char* text )
 {
     m_url = strpbrk( text, " \t" );
@@ -206,11 +215,14 @@ http_conn::HTTP_CODE http_conn::parse_request_line( char* text )
     return NO_REQUEST;
 }
 
+//解析http一个请求的头部信息
 http_conn::HTTP_CODE http_conn::parse_headers( char* text )
 {
+	//如果遇到空行说明头部已经解析完毕
     if( text[ 0 ] == '\0' )
     {
-        if ( m_method == HEAD )
+		
+        if ( strcasecmp(m_method, "GET") == 0 )
         {
             return GET_REQUEST;
         }
@@ -232,6 +244,7 @@ http_conn::HTTP_CODE http_conn::parse_headers( char* text )
             m_linger = true;
         }
     }
+	//如果是POST等方法就可以更新m_content_length
     else if ( strncasecmp( text, "Content-Length:", 15 ) == 0 )
     {
         text += 15;
@@ -253,6 +266,7 @@ http_conn::HTTP_CODE http_conn::parse_headers( char* text )
 
 }
 
+//判断http请求的消息体是否被完整地读入
 http_conn::HTTP_CODE http_conn::parse_content( char* text )
 {
     if ( m_read_idx >= ( m_content_length + m_checked_idx ) )
@@ -264,6 +278,7 @@ http_conn::HTTP_CODE http_conn::parse_content( char* text )
     return NO_REQUEST;
 }
 
+//根据服务器所处的状态调用相应的处理函数
 http_conn::HTTP_CODE http_conn::process_read()
 {
     LINE_STATUS line_status = LINE_OK;
@@ -279,6 +294,7 @@ http_conn::HTTP_CODE http_conn::process_read()
 
         switch ( m_check_state )
         {
+			//处于处理http第一行的状态
             case CHECK_STATE_REQUESTLINE:
             {
                 ret = parse_request_line( text );
@@ -288,6 +304,7 @@ http_conn::HTTP_CODE http_conn::process_read()
                 }
                 break;
             }
+			//处于处理http头部的状态
             case CHECK_STATE_HEADER:
             {
                 ret = parse_headers( text );
@@ -301,9 +318,11 @@ http_conn::HTTP_CODE http_conn::process_read()
                 }
                 break;
             }
+			//处于处理http正文的状态
             case CHECK_STATE_CONTENT:
             {
                 ret = parse_content( text );
+				
                 if ( ret == GET_REQUEST )
                 {
                     return do_request();
@@ -401,6 +420,7 @@ bool http_conn::write()
         }
     }
 }
+
 
 bool http_conn::add_response( const char* format, ... )
 {
@@ -548,4 +568,6 @@ void http_conn::process()
 
     modfd( m_epollfd, m_sockfd, EPOLLOUT );
 }
+
+
 
