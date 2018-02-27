@@ -20,6 +20,7 @@
 extern int addfd( int epollfd, int fd, bool one_shot );
 extern int removefd( int epollfd, int fd );
 
+//自己定义信号处理方式
 void addsig( int sig, void( handler )(int), bool restart = true )
 {
     struct sigaction sa;
@@ -41,6 +42,7 @@ void show_error( int connfd, const char* info )
 }
 
 
+
 int main( int argc, char* argv[] )
 {
     if( argc <= 2 )
@@ -56,6 +58,7 @@ int main( int argc, char* argv[] )
     threadpool< http_conn >* pool = NULL;
     try
     {
+		
         pool = new threadpool< http_conn >;
     }
     catch( ... )
