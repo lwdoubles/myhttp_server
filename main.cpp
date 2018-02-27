@@ -20,7 +20,7 @@
 extern int addfd( int epollfd, int fd, bool one_shot );
 extern int removefd( int epollfd, int fd );
 
-//自己定义信号处理方式
+//鑷繁瀹氫箟淇″彿澶勭悊鏂瑰紡
 void addsig( int sig, void( handler )(int), bool restart = true )
 {
     struct sigaction sa;
