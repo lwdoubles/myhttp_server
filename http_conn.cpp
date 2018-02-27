@@ -39,7 +39,7 @@ void removefd( int epollfd, int fd )
     close( fd );
 }
 
-//增加监听的事件种类
+//增加监听的事件及事件种类
 void modfd( int epollfd, int fd, int ev )
 {
     epoll_event event;
@@ -167,7 +167,7 @@ bool http_conn::read()
     return true;
 }
 
-//解析http请求行
+//解析http请求行，也就是第一行
 http_conn::HTTP_CODE http_conn::parse_request_line( char* text )
 {
     m_url = strpbrk( text, " \t" );
@@ -215,7 +215,7 @@ http_conn::HTTP_CODE http_conn::parse_request_line( char* text )
     return NO_REQUEST;
 }
 
-//解析http一个请求的头部信息
+//解析http一个请求的头部信息，有很多头部信息
 http_conn::HTTP_CODE http_conn::parse_headers( char* text )
 {
 	//如果遇到空行说明头部已经解析完毕
@@ -322,7 +322,7 @@ http_conn::HTTP_CODE http_conn::process_read()
             case CHECK_STATE_CONTENT:
             {
                 ret = parse_content( text );
-				
+				//这里的GET_REQUEST并非最后返回的状态
                 if ( ret == GET_REQUEST )
                 {
                     return do_request();
@@ -340,16 +340,18 @@ http_conn::HTTP_CODE http_conn::process_read()
     return NO_REQUEST;
 }
 
+//获取客户端指定的文件的内容
 http_conn::HTTP_CODE http_conn::do_request()
 {
     strcpy( m_real_file, doc_root );
     int len = strlen( doc_root );
     strncpy( m_real_file + len, m_url, FILENAME_LEN - len - 1 );
+	//获取文件信息
     if ( stat( m_real_file, &m_file_stat ) < 0 )
     {
         return NO_RESOURCE;
     }
-
+	//判断文件是否有可读权限
     if ( ! ( m_file_stat.st_mode & S_IROTH ) )
     {
         return FORBIDDEN_REQUEST;
@@ -366,6 +368,7 @@ http_conn::HTTP_CODE http_conn::do_request()
     return FILE_REQUEST;
 }
 
+//解除共享内存映射
 void http_conn::unmap()
 {
     if( m_file_address )
@@ -375,6 +378,7 @@ void http_conn::unmap()
     }
 }
 
+//写http响应
 bool http_conn::write()
 {
     int temp = 0;
@@ -389,6 +393,7 @@ bool http_conn::write()
 
     while( 1 )
     {
+
         temp = writev( m_sockfd, m_iv, m_iv_count );
         if ( temp <= -1 )
         {
@@ -422,6 +427,7 @@ bool http_conn::write()
 }
 
 
+//往写缓冲中写入待发送的数据,后面很多函数调用最终形成http响应报文
 bool http_conn::add_response( const char* format, ... )
 {
     if( m_write_idx >= WRITE_BUFFER_SIZE )
@@ -467,11 +473,13 @@ bool http_conn::add_blank_line()
     return add_response( "%s", "\r\n" );
 }
 
+//响应报文内容
 bool http_conn::add_content( const char* content )
 {
     return add_response( "%s", content );
 }
 
+//根据http解析结果，决定返回给客户端的内容
 bool http_conn::process_write( HTTP_CODE ret )
 {
     switch ( ret )
@@ -516,6 +524,7 @@ bool http_conn::process_write( HTTP_CODE ret )
             }
             break;
         }
+		//成功获取文件信息
         case FILE_REQUEST:
         {
             add_status_line( 200, ok_200_title );
@@ -551,6 +560,7 @@ bool http_conn::process_write( HTTP_CODE ret )
     return true;
 }
 
+//线程池中的工作线程调用
 void http_conn::process()
 {
     HTTP_CODE read_ret = process_read();
@@ -566,8 +576,7 @@ void http_conn::process()
         close_conn();
     }
 
+	//判断m_sockfd(客户端fd)缓冲区是否可写入
     modfd( m_epollfd, m_sockfd, EPOLLOUT );
 }
-
-
 
