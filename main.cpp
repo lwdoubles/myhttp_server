@@ -41,7 +41,18 @@ void show_error( int connfd, const char* info )
     close( connfd );
 }
 
-
+//服务器日志
+void log_write()
+{
+    if (0 == m_close_log)
+    {
+        //初始化日志
+        if (1 == m_log_write)
+            Log::get_instance()->init("./ServerLog", m_close_log, 2000, 800000, 800);
+        else
+            Log::get_instance()->init("./ServerLog", m_close_log, 2000, 800000, 0);
+    }
+}
 
 int main( int argc, char* argv[] )
 {
@@ -52,6 +63,9 @@ int main( int argc, char* argv[] )
     }
     const char* ip = argv[1];
     int port = atoi( argv[2] );
+
+    m_log_write = 1;
+    m_close_log = 0;
 
     addsig( SIGPIPE, SIG_IGN );
 
@@ -113,11 +127,13 @@ int main( int argc, char* argv[] )
                 int connfd = accept( listenfd, ( struct sockaddr* )&client_address, &client_addrlength );
                 if ( connfd < 0 )
                 {
+                    LOG_ERROR("%s:errno is:%d", "accept error", errno);
                     printf( "errno is: %d\n", errno );
                     continue;
                 }
                 if( http_conn::m_user_count >= MAX_FD )
                 {
+                    LOG_ERROR("%s", "Internal server busy");
                     show_error( connfd, "Internal server busy" );
                     continue;
                 }
@@ -132,6 +148,7 @@ int main( int argc, char* argv[] )
             {
                 if( users[sockfd].read() )
                 {
+                     LOG_INFO("deal with the client(%s)", inet_ntoa(users[sockfd].get_address()->sin_addr));
                     pool->append( users + sockfd );
                 }
                 else
@@ -143,6 +160,7 @@ int main( int argc, char* argv[] )
             {
                 if( !users[sockfd].write() )
                 {
+                    LOG_INFO("send data to the client(%s)", inet_ntoa(users[sockfd].get_address()->sin_addr));
                     users[sockfd].close_conn();
                 }
             }
